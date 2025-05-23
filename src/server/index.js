@@ -24,6 +24,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Trust Railway's proxy for correct client IP handling
 app.set('trust proxy', 1);
 
+console.log('Starting CEO Voice Notes server...');
+console.log('Trust proxy set:', app.get('trust proxy'));
+
 // Configure Winston logger
 const logger = winston.createLogger({
   level: isProduction ? 'info' : 'debug',
