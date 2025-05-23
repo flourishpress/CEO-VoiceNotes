@@ -232,6 +232,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root endpoint for Railway health check
+app.get('/', (req, res) => {
+  res.status(200).send('CEO Voice Notes is running!');
+});
+
 // Start server
 app.listen(port, () => {
   console.log(`Server running in ${isProduction ? 'production' : 'development'} mode on port ${port}`);
