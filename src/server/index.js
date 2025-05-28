@@ -142,24 +142,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Input validation middleware
-const validateN8NWebhook = [
-  body('transcript')
-    .trim()
-    .isLength({ min: 1, max: 10000 })
-    .withMessage('Transcript must be between 1 and 10000 characters')
-    .escape()
-];
-
 // Routes
-app.post('/api/transcribe', upload.single('audio'), validateN8NWebhook, async (req, res) => {
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     // Validate request
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file provided' });
     }
