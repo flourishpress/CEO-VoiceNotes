@@ -9,23 +9,45 @@ const conversationList = document.getElementById('conversationList');
 // Initialize
 async function init() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                sampleRate: 44100
+            } 
+        });
+        
+        // Use more compatible audio format
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus'
+        });
         
         mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
         };
 
         mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            await sendAudioToServer(audioBlob);
-            audioChunks = [];
+            try {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+                await sendAudioToServer(audioBlob);
+                audioChunks = [];
+            } catch (error) {
+                console.error('Error processing recording:', error);
+                recordingStatus.textContent = `Error: ${error.message}`;
+            }
+        };
+
+        mediaRecorder.onerror = (event) => {
+            console.error('MediaRecorder error:', event.error);
+            recordingStatus.textContent = `Recording error: ${event.error.message}`;
         };
 
         loadConversationHistory();
     } catch (err) {
         console.error('Error accessing microphone:', err);
-        recordingStatus.textContent = 'Error: Could not access microphone';
+        recordingStatus.textContent = `Error: ${err.message}`;
     }
 }
 
@@ -39,26 +61,36 @@ function toggleRecording() {
 }
 
 function startRecording() {
-    audioChunks = [];
-    mediaRecorder.start();
-    isRecording = true;
-    recordButton.classList.add('recording');
-    recordButton.innerHTML = '<span class="record-icon">⏹</span> Stop Recording';
-    recordingStatus.textContent = 'Recording...';
+    try {
+        audioChunks = [];
+        mediaRecorder.start(1000); // Collect data every second
+        isRecording = true;
+        recordButton.classList.add('recording');
+        recordButton.innerHTML = '<span class="record-icon">⏹</span> Stop Recording';
+        recordingStatus.textContent = 'Recording...';
+    } catch (error) {
+        console.error('Error starting recording:', error);
+        recordingStatus.textContent = `Error: ${error.message}`;
+    }
 }
 
 function stopRecording() {
-    mediaRecorder.stop();
-    isRecording = false;
-    recordButton.classList.remove('recording');
-    recordButton.innerHTML = '<span class="record-icon">🎤</span> Start Recording';
-    recordingStatus.textContent = 'Processing...';
+    try {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordButton.classList.remove('recording');
+        recordButton.innerHTML = '<span class="record-icon">🎤</span> Start Recording';
+        recordingStatus.textContent = 'Processing...';
+    } catch (error) {
+        console.error('Error stopping recording:', error);
+        recordingStatus.textContent = `Error: ${error.message}`;
+    }
 }
 
 // Send audio to server
 async function sendAudioToServer(audioBlob) {
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.wav');
+    formData.append('audio', audioBlob, 'recording.webm');
 
     try {
         const response = await fetch('/api/transcribe', {
@@ -67,16 +99,17 @@ async function sendAudioToServer(audioBlob) {
         });
 
         if (!response.ok) {
-            throw new Error('Network response was not ok');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server error: ${response.status}`);
         }
 
         const data = await response.json();
-        // addConversationToUI(data);
         loadConversationHistory(); // Refresh the conversation list
         recordingStatus.textContent = 'Recording processed successfully';
     } catch (error) {
         console.error('Error sending audio:', error);
-        recordingStatus.textContent = 'Error processing recording';
+        recordingStatus.textContent = `Error: ${error.message}`;
+        throw error; // Re-throw to be caught by the onstop handler
     }
 }
 

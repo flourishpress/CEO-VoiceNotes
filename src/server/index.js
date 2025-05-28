@@ -112,6 +112,14 @@ const upload = multer({
   storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    // Accept audio files
+    if (file.mimetype.startsWith('audio/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only audio files are allowed!'), false);
+    }
   }
 });
 
@@ -156,13 +164,6 @@ app.post('/api/transcribe', upload.single('audio'), validateN8NWebhook, async (r
       return res.status(400).json({ error: 'No audio file provided' });
     }
 
-    // Validate audio file format
-    const allowedMimeTypes = ['audio/wav', 'audio/mpeg', 'audio/mp4', 'audio/webm'];
-    if (!allowedMimeTypes.includes(req.file.mimetype)) {
-      fs.unlinkSync(req.file.path); // Clean up invalid file
-      return res.status(400).json({ error: 'Invalid audio file format' });
-    }
-
     logger.info('Processing audio file', {
       filename: req.file.filename,
       size: req.file.size,
@@ -172,7 +173,8 @@ app.post('/api/transcribe', upload.single('audio'), validateN8NWebhook, async (r
     // Transcribe audio using OpenAI Whisper
     const transcription = await openai.audio.transcriptions.create({
       file: fs.createReadStream(req.file.path),
-      model: "whisper-1"
+      model: "whisper-1",
+      response_format: "json"
     });
 
     // Send to N8N webhook
@@ -184,6 +186,10 @@ app.post('/api/transcribe', upload.single('audio'), validateN8NWebhook, async (r
       body: JSON.stringify({ transcript: transcription.text })
     });
 
+    if (!n8nResponse.ok) {
+      throw new Error(`N8N webhook failed: ${n8nResponse.statusText}`);
+    }
+
     const n8nData = await n8nResponse.json();
 
     // Store in database
@@ -192,7 +198,7 @@ app.post('/api/transcribe', upload.single('audio'), validateN8NWebhook, async (r
       [new Date().toISOString(), transcription.text, JSON.stringify(n8nData)],
       function(err) {
         if (err) {
-          console.error('Error storing conversation:', err);
+          logger.error('Error storing conversation:', err);
         }
       }
     );
@@ -209,7 +215,15 @@ app.post('/api/transcribe', upload.single('audio'), validateN8NWebhook, async (r
       error: error.message,
       stack: error.stack
     });
-    res.status(500).json({ error: 'Error processing audio' });
+    
+    // Clean up the file if it exists
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({ 
+      error: isProduction ? 'Error processing audio' : error.message 
+    });
   }
 });
 
