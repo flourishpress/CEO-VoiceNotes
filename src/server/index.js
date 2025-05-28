@@ -201,6 +201,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       error: error.message,
       stack: error.stack
     });
+    // Also log to console for Railway visibility
+    console.error('Error processing audio:', error);
     
     // Clean up the file if it exists
     if (req.file && fs.existsSync(req.file.path)) {
