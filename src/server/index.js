@@ -159,7 +159,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     // Transcribe audio using OpenAI Whisper
     const transcription = await openai.audio.transcriptions.create({
       file: fs.createReadStream(req.file.path),
-      model: "whisper-1",
+      model: "gpt-4o-transcribe",
       response_format: "json"
     });
 
